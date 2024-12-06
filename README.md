@@ -43,7 +43,7 @@ In two different terminals, proceed as follow:
 
 1. Run data retrieval
 ```bash
-python src.data_retrieval
+python -m src.data_retrieval
 ```
 
 2. Run Streamlit Web App:
