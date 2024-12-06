@@ -27,11 +27,11 @@ pip install -r requirements.txt
 Clone the repository :
 
 ```bash
-git clone https://github.com/your_username/finance-scraper-forecaster.git
-cd finance-scraper-forecaster
+git clone https://github.com/your_username/realtime-asset-forecasting.git
+cd realtime-asset-forecasting
 ```
 
-Set Up Binance API Keys
+## Set Up Binance API Keys
 
 1. Log in to your Binance account.
 2. Generate an API key and secret (refer to Binance's official guide).
