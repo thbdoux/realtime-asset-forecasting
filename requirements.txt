@@ -1,0 +1,10 @@
+python-binance
+pathway
+pandas
+numpy
+streamlit
+plotly
+python-dotenv
+statsmodels
+matplotlib
+streamlit-autorefresh
