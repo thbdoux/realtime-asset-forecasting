@@ -94,14 +94,14 @@ streamlit run src/app.py
 
 This project implements two distinct approaches to data transformation:
 
-    Pandas:
-        Suitable for smaller datasets and prototyping.
-        Transformation involves grouping and aggregation using pandas groupby().
+- Pandas:
+    1. Suitable for smaller datasets and prototyping.
+    2. Transformation involves grouping and aggregation using pandas groupby().
 
-    Pathway:
-        Optimized for real-time and large-scale data processing.
-        Uses Pathway’s table operations and reducers for fast aggregation.
-        Enables live updating for high-frequency trading data.
+- Pathway:
+    1. Optimized for real-time and large-scale data processing.
+    2. Uses Pathway’s table operations and reducers for fast aggregation.
+    3. Enables live updating for high-frequency trading data.
 
 Both approaches are implemented to allow side-by-side performance evaluation.
 
