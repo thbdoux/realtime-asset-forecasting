@@ -149,10 +149,10 @@ class BTCForecaster:
                 self.historical_data = pd.read_csv(self.data_path)
             
             # Ensure timestamp is datetime
-            self.historical_data['Timestamp'] = pd.to_datetime(self.historical_data['Timestamp'])
+            self.historical_data['time_window'] = pd.to_datetime(self.historical_data['time_window'])
             
-            # Set timestamp as index for time series analysis
-            self.historical_data.set_index('Timestamp', inplace=True)
+            # Set time_window as index for time series analysis
+            self.historical_data.set_index('time_window', inplace=True)
             
             self.logger.info(f"Loaded {len(self.historical_data)} rows of data")
             return self.historical_data
@@ -161,7 +161,7 @@ class BTCForecaster:
             self.logger.error(f"Error loading data: {e}")
             return None
 
-    def forecast_price(self, periods=5, forecast_column='Close (USDT)', use_recent_data=True):
+    def forecast_price(self, periods=5, forecast_column='close_price', use_recent_data=True):
         """
         Forecast OHLCV metrics with memory-efficient approach
         
@@ -200,7 +200,7 @@ class BTCForecaster:
         :return: Dictionary of forecasts for different metrics
         """
         forecasts = {}
-        metrics = ['Open (USDT)', 'Close (USDT)', 'High (USDT)', 'Low (USDT)', 'Volume (BTC)']
+        metrics = ['open_price', 'close_price', 'high_price', 'low_price', 'volume']
         
         for metric in metrics:
             forecast = self.forecast_price(periods=periods, forecast_column=metric)

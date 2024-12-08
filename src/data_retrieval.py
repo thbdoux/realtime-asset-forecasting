@@ -84,6 +84,49 @@ class BinanceDataRetriever:
         # except Exception as e:
         #     self.logger.error(f"Error saving to CSV: {e}")
 
+    def save_ohlcv_to_csv(self, df, data_path):
+        """
+        Save OHLCV DataFrame to CSV with time window overwriting and proper volume aggregation.
+        
+        :param df: DataFrame to save (must include 'time_window' and 'volume' column)
+        :param data_path: Path to the CSV file
+        """
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(data_path), exist_ok=True)
+        
+        if os.path.exists(data_path):
+            # Read existing data
+            existing_df = pd.read_csv(data_path)
+            
+            # Ensure 'time_window' is datetime for consistency
+            existing_df['time_window'] = pd.to_datetime(existing_df['time_window'])
+            df['time_window'] = pd.to_datetime(df['time_window'])
+            
+            # Combine new and existing data
+            combined_df = pd.concat([existing_df, df])
+            
+            # Aggregate by time window for OHLCV
+            combined_df = combined_df.groupby('time_window', as_index=False).agg({
+                'open_price': 'first',
+                'high_price': 'max',
+                'low_price': 'min',
+                'close_price': 'last',
+                'volume': 'sum'  # Properly aggregate volume
+            })
+        else:
+            # No existing file, just use the new data
+            combined_df = df
+
+        # Enforce max rows if necessary
+        if len(combined_df) > self.max_rows:
+            combined_df = combined_df.tail(self.max_rows)
+            self.logger.info(f"Rotated data, kept last {self.max_rows} rows")
+
+        # Save updated data to CSV
+        combined_df.to_csv(data_path, index=False)
+        self.logger.info(f"Saved {len(df)} rows to {data_path}")
+
+
     def get_btcusdt_data(self, limit=20):
         """Retrieve recent trades data from Binance and perform OHLCV aggregation."""
         # Extraction
@@ -95,13 +138,30 @@ class BinanceDataRetriever:
         df = df[['id', 'price', 'qty', 'time', 'isBuyerMaker']]
         df['price'] = pd.to_numeric(df['price'])
         df['qty'] = pd.to_numeric(df['qty'])
-        df['time'] = pd.to_datetime(df['time']).dt.strftime("%Y-%m-%dT%H:%M:%S")
+        # df['time'] = pd.to_datetime(df['time']).dt.strftime("%Y-%m-%dT%H:%M:%S")
+        df['time'] = pd.to_datetime(df['time'], unit='ms')
         df['isBuyerMaker'] = df['isBuyerMaker'].map({True: 'Seller', False: 'Buyer'})
         df = df.rename(columns={"id" : "transaction_id"})
         # save raw data
         self.save_to_csv(df, data_path=self.raw_data_path)
 
+        # pandas way for OHLCV 
+        df['time_window'] = df['time'].dt.floor(f'{self.time_window_minutes}T')
+
+        # Compute OHLCV
+        ohlcv = df.groupby('time_window').agg(
+            open_price=('price', 'first'),
+            high_price=('price', 'max'),
+            low_price=('price', 'min'),
+            close_price=('price', 'last'),
+            volume=('qty', 'sum')
+        ).reset_index()
+
+        self.save_ohlcv_to_csv(ohlcv, data_path=self.ohlcv_data_path)
         # Ingest the DataFrame into Pathway
+        """
+        
+        
         input_data = pw.io.csv.read(
             self.raw_data_path,
                 schema=RawBinanceData
@@ -127,12 +187,13 @@ class BinanceDataRetriever:
         pw.io.csv.write(ohlcv_data,self.ohlcv_data_path)
         # Run Pathway
         pw.run()
+        """
 
         # except Exception as e:
         #     self.logger.error(f"Error retrieving Binance data: {e}")
         #     return pd.DataFrame()
 
-    def run_data_pipeline(self, interval=1):
+    def run_data_pipeline(self, interval=0.2):
         """
         Continuous data retrieval and storage with memory checks
         
