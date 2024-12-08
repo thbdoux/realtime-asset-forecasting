@@ -3,3 +3,4 @@
 btc-live-env
 *pycache*
 *.csv
+.DS_Store
