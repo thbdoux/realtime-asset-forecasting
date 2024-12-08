@@ -37,31 +37,31 @@ def perform_forecast():
     
     :return: Forecast data
     """
-    # try:
-    forecaster = BTCForecaster()
-    forecast = forecaster.forecast_multiple_metrics()
-    
-    if forecast is not None:
-        # Prepare forecast data
-        recent_data = load_recent_data()
-        last_timestamp = recent_data['time_window'].iloc[-1]
+    try:
+        forecaster = BTCForecaster()
+        forecast = forecaster.forecast_multiple_metrics()
         
-        forecast_timestamps = pd.date_range(
-            start=last_timestamp, 
-            periods=len(forecast['close_price'])+1,
-            freq='T'  # Minute intervals to match OHLCV data
-        )[1:]
-        
-        forecast_df = pd.DataFrame({
-            'time_window': forecast_timestamps,
-            **{metric: values for metric, values in forecast.items()}
-        })
-        
-        return forecast_df
-    return None
-    # except Exception as e:
-    #     st.error(f"Forecasting error: {e}")
-    #     return None
+        if forecast is not None:
+            # Prepare forecast data
+            recent_data = load_recent_data()
+            last_timestamp = recent_data['time_window'].iloc[-1]
+            
+            forecast_timestamps = pd.date_range(
+                start=last_timestamp, 
+                periods=len(forecast['close_price'])+1,
+                freq='T'  # Minute intervals to match OHLCV data
+            )[1:]
+            
+            forecast_df = pd.DataFrame({
+                'time_window': forecast_timestamps,
+                **{metric: values for metric, values in forecast.items()}
+            })
+            
+            return forecast_df
+        return None
+    except Exception as e:
+        st.error(f"Forecasting error: {e}")
+        return None
 def main():
     # Page configuration
     st.set_page_config(layout="wide")

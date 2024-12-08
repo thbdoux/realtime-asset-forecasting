@@ -63,26 +63,26 @@ class BinanceDataRetriever:
         
         :param df: DataFrame to save
         """
-        # try:
+        try:
             # Ensure directory exists
-        os.makedirs(os.path.dirname(data_path), exist_ok=True)
-        
-        # Check if file exists and manage row count
-        if os.path.exists(data_path):
-            existing_df = pd.read_csv(data_path)
+            os.makedirs(os.path.dirname(data_path), exist_ok=True)
             
-            # If exceeding max rows, keep only recent data
-            if len(existing_df) + len(df) > self.max_rows:
-                existing_df = existing_df.tail(self.max_rows - len(df))
-                existing_df.to_csv(data_path, index=False)
-                self.logger.info(f"Rotated data, kept {len(existing_df)} rows")
-        
+            # Check if file exists and manage row count
+            if os.path.exists(data_path):
+                existing_df = pd.read_csv(data_path)
+                
+                # If exceeding max rows, keep only recent data
+                if len(existing_df) + len(df) > self.max_rows:
+                    existing_df = existing_df.tail(self.max_rows - len(df))
+                    existing_df.to_csv(data_path, index=False)
+                    self.logger.info(f"Rotated data, kept {len(existing_df)} rows")
+            
 
-        df.to_csv(data_path, mode='a', header=not os.path.exists(data_path), index=False) 
-        self.logger.info(f"Saved {len(df)} new rows")
+            df.to_csv(data_path, mode='a', header=not os.path.exists(data_path), index=False) 
+            self.logger.info(f"Saved {len(df)} new rows")
             
-        # except Exception as e:
-        #     self.logger.error(f"Error saving to CSV: {e}")
+        except Exception as e:
+            self.logger.error(f"Error saving to CSV: {e}")
 
     def save_ohlcv_to_csv(self, df, data_path):
         """
@@ -130,68 +130,67 @@ class BinanceDataRetriever:
     def get_btcusdt_data(self, limit=20):
         """Retrieve recent trades data from Binance and perform OHLCV aggregation."""
         # Extraction
-        # try:
-        trades = self.client.get_recent_trades(symbol='BTCUSDT', limit=limit)
-        df = pd.DataFrame(trades)
+        try:
+            trades = self.client.get_recent_trades(symbol='BTCUSDT', limit=limit)
+            df = pd.DataFrame(trades)
 
-        # Data transformation
-        df = df[['id', 'price', 'qty', 'time', 'isBuyerMaker']]
-        df['price'] = pd.to_numeric(df['price'])
-        df['qty'] = pd.to_numeric(df['qty'])
-        # df['time'] = pd.to_datetime(df['time']).dt.strftime("%Y-%m-%dT%H:%M:%S")
-        df['time'] = pd.to_datetime(df['time'], unit='ms')
-        df['isBuyerMaker'] = df['isBuyerMaker'].map({True: 'Seller', False: 'Buyer'})
-        df = df.rename(columns={"id" : "transaction_id"})
-        # save raw data
-        self.save_to_csv(df, data_path=self.raw_data_path)
+            # Data transformation
+            df = df[['id', 'price', 'qty', 'time', 'isBuyerMaker']]
+            df['price'] = pd.to_numeric(df['price'])
+            df['qty'] = pd.to_numeric(df['qty'])
+            # df['time'] = pd.to_datetime(df['time']).dt.strftime("%Y-%m-%dT%H:%M:%S")
+            df['time'] = pd.to_datetime(df['time'], unit='ms')
+            df['isBuyerMaker'] = df['isBuyerMaker'].map({True: 'Seller', False: 'Buyer'})
+            df = df.rename(columns={"id" : "transaction_id"})
+            # save raw data
+            self.save_to_csv(df, data_path=self.raw_data_path)
 
-        # pandas way for OHLCV 
-        df['time_window'] = df['time'].dt.floor(f'{self.time_window_minutes}T')
+            # pandas way for OHLCV 
+            """
+            
+            df['time_window'] = df['time'].dt.floor(f'{self.time_window_minutes}T')
 
-        # Compute OHLCV
-        ohlcv = df.groupby('time_window').agg(
-            open_price=('price', 'first'),
-            high_price=('price', 'max'),
-            low_price=('price', 'min'),
-            close_price=('price', 'last'),
-            volume=('qty', 'sum')
-        ).reset_index()
+            # Compute OHLCV
+            ohlcv = df.groupby('time_window').agg(
+                open_price=('price', 'first'),
+                high_price=('price', 'max'),
+                low_price=('price', 'min'),
+                close_price=('price', 'last'),
+                volume=('qty', 'sum')
+            ).reset_index()
 
-        self.save_ohlcv_to_csv(ohlcv, data_path=self.ohlcv_data_path)
-        # Ingest the DataFrame into Pathway
-        """
-        
-        
-        input_data = pw.io.csv.read(
-            self.raw_data_path,
-                schema=RawBinanceData
+            self.save_ohlcv_to_csv(ohlcv, data_path=self.ohlcv_data_path)
+            """
+            # Ingest the DataFrame into Pathway
+            input_data = pw.io.csv.read(
+                self.raw_data_path,
+                    schema=RawBinanceData
+                )
+            input_data = input_data.with_columns(
+                dtime = input_data.time.dt.strptime(fmt="%Y-%m-%dT%H:%M:%S"),
             )
-        input_data = input_data.with_columns(
-            dtime = input_data.time.dt.strptime(fmt="%Y-%m-%dT%H:%M:%S"),
-        )
-        # Perform OHLCV aggregation
-        ohlcv_data = input_data.windowby(
-            pw.this.dtime, 
-            window=pw.temporal.sliding(
-                duration=datetime.timedelta(minutes=self.time_window_minutes), 
-                hop=datetime.timedelta(minutes=self.time_window_minutes)),
-                ).reduce(
-            open_price=pw.reducers.earliest(pw.this.price),
-            close_price=pw.reducers.latest(pw.this.price),
-            high_price=pw.reducers.max(pw.this.price),
-            low_price=pw.reducers.min(pw.this.price),
-            volume=pw.reducers.sum(pw.this.qty),
-        )
-        # df_ohlcv = pw.io.python.get_table_as_pandas(ohlcv_data)
-        # self.save_to_csv(df_ohlcv, data_path=self.ohlcv_data_path)
-        pw.io.csv.write(ohlcv_data,self.ohlcv_data_path)
-        # Run Pathway
-        pw.run()
-        """
+            # Perform OHLCV aggregation
+            ohlcv_data = input_data.windowby(
+                pw.this.dtime, 
+                window=pw.temporal.sliding(
+                    duration=datetime.timedelta(minutes=self.time_window_minutes), 
+                    hop=datetime.timedelta(minutes=self.time_window_minutes)),
+                    ).reduce(
+                open_price=pw.reducers.earliest(pw.this.price),
+                close_price=pw.reducers.latest(pw.this.price),
+                high_price=pw.reducers.max(pw.this.price),
+                low_price=pw.reducers.min(pw.this.price),
+                volume=pw.reducers.sum(pw.this.qty),
+            )
+            # df_ohlcv = pw.io.python.get_table_as_pandas(ohlcv_data)
+            # self.save_to_csv(df_ohlcv, data_path=self.ohlcv_data_path)
+            pw.io.csv.write(ohlcv_data,self.ohlcv_data_path)
+            # Run Pathway
+            pw.run()
 
-        # except Exception as e:
-        #     self.logger.error(f"Error retrieving Binance data: {e}")
-        #     return pd.DataFrame()
+        except Exception as e:
+            self.logger.error(f"Error retrieving Binance data: {e}")
+            return pd.DataFrame()
 
     def run_data_pipeline(self, interval=0.2):
         """
