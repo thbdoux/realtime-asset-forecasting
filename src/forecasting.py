@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
 import logging
+from datetime import timedelta
 
 class BTCForecaster:
     def __init__(self, 
@@ -22,6 +23,34 @@ class BTCForecaster:
         logging.basicConfig(level=logging.INFO, 
                             format='%(asctime)s - %(levelname)s: %(message)s')
         self.logger = logging.getLogger(__name__)
+
+
+    def generate_future_time_windows(self, periods):
+        """
+        Generate future time windows based on the most recent time_window in historical data.
+        
+        :param periods: Number of future periods to generate
+        :return: List of future time windows
+        """
+        if self.historical_data is None or self.historical_data.empty:
+            self.logger.error("Historical data is not loaded. Cannot generate future time windows.")
+            return None
+        
+        # Determine the frequency of the time windows (assume 1-minute intervals for OHLCV)
+        frequency = self.historical_data.index.to_series().diff().median()
+        if pd.isnull(frequency):
+            self.logger.error("Unable to determine frequency from historical data.")
+            return None
+
+        # Get the last time window in historical data
+        last_time = self.historical_data.index[-1]
+
+        # Generate future time windows
+        future_windows = [last_time + (i + 1) * frequency for i in range(periods)]
+
+        self.logger.info(f"Generated {len(future_windows)} future time windows")
+        return future_windows
+
 
     def load_data(self, use_recent_chunks=True):
         """
@@ -58,58 +87,86 @@ class BTCForecaster:
             self.logger.error(f"Error loading data: {e}")
             return None
 
+    import numpy as np
+
     def forecast_price(self, periods=5, forecast_column='close_price', use_recent_data=True):
         """
-        Forecast OHLCV metrics with memory-efficient approach
-        
+        Forecast a single OHLCV metric using ARIMA.
+
         :param periods: Number of future periods to forecast
         :param forecast_column: Column to forecast (default: Close Price)
         :param use_recent_data: Use only recent data for forecasting
         :return: Forecasted values
         """
-        try:
-            # Load data
-            prices = self.load_data(use_recent_data)
-            
-            if prices is None:
-                self.logger.error("Could not load price data")
-                return None
-            
-            # Fit ARIMA model
-            model = ARIMA(prices[forecast_column], order=(1,1,1))
-            model_fit = model.fit()
-            
-            # Generate forecast
-            self.forecast = model_fit.forecast(steps=periods)
-            
-            self.logger.info(f"Generated forecast for {periods} periods")
-            return self.forecast
+        # Load data
+        prices = self.load_data(use_recent_data)
+        if prices is None:
+            self.logger.error("Could not load price data")
+            return None
         
-        except Exception as e:
-            self.logger.error(f"Forecasting error: {e}")
+        # Fit ARIMA model
+        model = ARIMA(prices[forecast_column], order=(1, 1, 1))
+        model_fit = model.fit()
+
+        # Generate forecast
+        forecast = model_fit.forecast(steps=periods)
+        self.logger.info(f"Generated forecast for {forecast_column} over {periods} periods")
+        return forecast
+
+    def forecast_ohlcv(self, periods=5, use_recent_data=True):
+        """
+        Forecast multiple OHLCV metrics while ensuring logical consistency.
+
+        :param periods: Number of future periods to forecast
+        :param use_recent_data: Use only recent data for forecasting
+        :return: DataFrame of forecasted OHLCV metrics
+        """
+        # Load historical data
+        prices = self.load_data(use_recent_data)
+        if prices is None:
+            self.logger.error("Could not load price data")
+            return None
+        
+        # Forecast close_price
+        close_forecast = self.forecast_price(periods=periods, forecast_column='close_price', use_recent_data=use_recent_data)
+        if close_forecast is None:
+            self.logger.error("Failed to forecast close_price")
             return None
 
-    def forecast_multiple_metrics(self, periods=5):
-        """
-        Forecast multiple OHLCV metrics
-        
-        :param periods: Number of future periods to forecast
-        :return: Dictionary of forecasts for different metrics
-        """
-        forecasts = {}
-        metrics = ['open_price', 'close_price', 'high_price', 'low_price', 'volume']
-        
-        for metric in metrics:
-            forecast = self.forecast_price(periods=periods, forecast_column=metric)
-            forecasts[metric] = forecast
-        
-        return forecasts
+        # Calculate relationships from historical data
+        prices['high_dev'] = (prices['high_price'] - prices['close_price']) / prices['close_price']
+        prices['low_dev'] = (prices['close_price'] - prices['low_price']) / prices['close_price']
+        prices['open_dev'] = (prices['open_price'] - prices['close_price']) / prices['close_price']
+
+        # Use historical averages to adjust forecasts
+        high_dev_mean = prices['high_dev'].mean()
+        low_dev_mean = prices['low_dev'].mean()
+        open_dev_mean = prices['open_dev'].mean()
+
+        # Generate forecasted metrics
+        forecast_df = {
+            'close_price': close_forecast,
+            'high_price': close_forecast * (1 + high_dev_mean),
+            'low_price': close_forecast * (1 - low_dev_mean),
+            'open_price': close_forecast * (1 + open_dev_mean)
+        }
+
+        # Forecast volume (independently)
+        forecast_df['volume'] = self.forecast_price(periods=periods, forecast_column='volume', use_recent_data=use_recent_data)
+
+        # Convert to DataFrame
+        forecast_df = pd.DataFrame(forecast_df)
+        forecast_df['time_window'] = self.generate_future_time_windows(periods=periods)  # Assuming a function exists to generate future time windows
+
+        self.logger.info(f"Generated OHLCV forecast for {periods} periods")
+        return forecast_df
+
 
 def main():
     forecaster = BTCForecaster()
     
     # Forecast multiple metrics
-    multi_forecast = forecaster.forecast_multiple_metrics()
+    multi_forecast = forecaster.forecast_ohlcv()
     
     # Print forecasts
     for metric, forecast in multi_forecast.items():

@@ -39,7 +39,7 @@ def perform_forecast():
     """
     try:
         forecaster = BTCForecaster()
-        forecast = forecaster.forecast_multiple_metrics()
+        forecast = forecaster.forecast_ohlcv(periods=2)
         
         if forecast is not None:
             # Prepare forecast data
@@ -65,7 +65,7 @@ def perform_forecast():
 def main():
     # Page configuration
     st.set_page_config(layout="wide")
-    st_autorefresh(interval=2 * 1000, key="dataframerefresh")  # Refreshes every two seconds
+    st_autorefresh(interval=1 * 1000, key="dataframerefresh")  # Refreshes every two seconds
     st.title('BTC/USDT Real-Time OHLCV Analysis')
     st.markdown(f"Last update: **{datetime.now()}**")
 
@@ -155,9 +155,9 @@ def main():
         fig_combined.update_layout(
             height=700,
             title='BTC Price Candlestick Chart with Volume and Forecast Highlight',
-            xaxis_title='Time (1 min window)',
+            xaxis_title='Time (10 sec window)',
             yaxis_title='Price (USDT)',
-            xaxis2_title='Time (1 min window)',
+            xaxis2_title='Time (10 sec window)',
             yaxis2_title='Volume',
             xaxis_rangeslider_visible=False
         )

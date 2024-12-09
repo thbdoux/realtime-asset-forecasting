@@ -7,6 +7,7 @@ import time
 import logging
 import pathway as pw
 import datetime
+import argparse
 
 class RawBinanceData(pw.Schema): # TODO : changer les types 
     transaction_id: int
@@ -127,10 +128,15 @@ class BinanceDataRetriever:
         self.logger.info(f"Saved {len(df)} rows to {data_path}")
 
 
-    def get_btcusdt_data(self, limit=20):
+    def get_btcusdt_data(self, limit, time_scale="min", number=1):
         """Retrieve recent trades data from Binance and perform OHLCV aggregation."""
         # Extraction
         try:
+            if time_scale not in ['sec', 'min', 'hour']:
+                raise ValueError(f"Invalid time_scale: {time_scale}. Must be 'sec', 'min', or 'hour'.")
+            if number <= 0:
+                raise ValueError(f"Invalid number: {number}. Must be a positive integer.")
+        
             trades = self.client.get_recent_trades(symbol='BTCUSDT', limit=limit)
             df = pd.DataFrame(trades)
 
@@ -145,10 +151,10 @@ class BinanceDataRetriever:
             # save raw data
             self.save_to_csv(df, data_path=self.raw_data_path)
 
-            # pandas way for OHLCV 
-            """
-            
-            df['time_window'] = df['time'].dt.floor(f'{self.time_window_minutes}T')
+            time_window_str = f'{number}{time_scale[0]}'
+            df['time_window'] = df['time'].dt.floor(time_window_str)
+
+            # df['time_window'] = df['time'].dt.floor(f'{self.time_window_minutes}T')
 
             # Compute OHLCV
             ohlcv = df.groupby('time_window').agg(
@@ -160,39 +166,39 @@ class BinanceDataRetriever:
             ).reset_index()
 
             self.save_ohlcv_to_csv(ohlcv, data_path=self.ohlcv_data_path)
-            """
+            
             # Ingest the DataFrame into Pathway
-            input_data = pw.io.csv.read(
-                self.raw_data_path,
-                    schema=RawBinanceData
-                )
-            input_data = input_data.with_columns(
-                dtime = input_data.time.dt.strptime(fmt="%Y-%m-%dT%H:%M:%S"),
-            )
-            # Perform OHLCV aggregation
-            ohlcv_data = input_data.windowby(
-                pw.this.dtime, 
-                window=pw.temporal.sliding(
-                    duration=datetime.timedelta(minutes=self.time_window_minutes), 
-                    hop=datetime.timedelta(minutes=self.time_window_minutes)),
-                    ).reduce(
-                open_price=pw.reducers.earliest(pw.this.price),
-                close_price=pw.reducers.latest(pw.this.price),
-                high_price=pw.reducers.max(pw.this.price),
-                low_price=pw.reducers.min(pw.this.price),
-                volume=pw.reducers.sum(pw.this.qty),
-            )
-            # df_ohlcv = pw.io.python.get_table_as_pandas(ohlcv_data)
-            # self.save_to_csv(df_ohlcv, data_path=self.ohlcv_data_path)
-            pw.io.csv.write(ohlcv_data,self.ohlcv_data_path)
-            # Run Pathway
-            pw.run()
+            # input_data = pw.io.csv.read(
+            #     self.raw_data_path,
+            #         schema=RawBinanceData
+            #     )
+            # input_data = input_data.with_columns(
+            #     dtime = input_data.time.dt.strptime(fmt="%Y-%m-%dT%H:%M:%S"),
+            # )
+            # # Perform OHLCV aggregation
+            # ohlcv_data = input_data.windowby(
+            #     pw.this.dtime, 
+            #     window=pw.temporal.sliding(
+            #         duration=datetime.timedelta(minutes=self.time_window_minutes), 
+            #         hop=datetime.timedelta(minutes=self.time_window_minutes)),
+            #         ).reduce(
+            #     open_price=pw.reducers.earliest(pw.this.price),
+            #     close_price=pw.reducers.latest(pw.this.price),
+            #     high_price=pw.reducers.max(pw.this.price),
+            #     low_price=pw.reducers.min(pw.this.price),
+            #     volume=pw.reducers.sum(pw.this.qty),
+            # )
+            # # df_ohlcv = pw.io.python.get_table_as_pandas(ohlcv_data)
+            # # self.save_to_csv(df_ohlcv, data_path=self.ohlcv_data_path)
+            # pw.io.csv.write(ohlcv_data,self.ohlcv_data_path)
+            # # Run Pathway
+            # pw.run()
 
         except Exception as e:
             self.logger.error(f"Error retrieving Binance data: {e}")
             return pd.DataFrame()
 
-    def run_data_pipeline(self, interval=0.2):
+    def run_data_pipeline(self, frequency, limit, time_window_scale, time_window_size):
         """
         Continuous data retrieval and storage with memory checks
         
@@ -206,13 +212,24 @@ class BinanceDataRetriever:
                 self.logger.warning("High memory usage detected. Consider restarting.")
             
             # Retrieve and save data
-            self.get_btcusdt_data()
+            self.get_btcusdt_data(limit, time_scale=time_window_scale, number=time_window_size)
             # Wait before next iteration
-            time.sleep(interval)
+            time.sleep(frequency)
 
 def main():
-    retriever = BinanceDataRetriever()
-    retriever.run_data_pipeline()
+    retriever = BinanceDataRetriever(
+        max_rows=5000,  # Maximum rows to keep in CSV
+        memory_threshold_mb=500,  # Memory usage threshold
+        time_window_minutes = 1, # size of candlesticks 
+        raw_data_path='data/raw_btcusdt.csv',
+        ohlcv_data_path = 'data/btcusdt_ohlcv.csv')
+
+    retriever.run_data_pipeline(
+        frequency=0.05, 
+        limit=50, 
+        time_window_scale="sec", 
+        time_window_size=10
+        )
 
 if __name__ == "__main__":
     main()

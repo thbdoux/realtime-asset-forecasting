@@ -2,7 +2,7 @@
 
 This project provides a real-time pipeline to scrape and forecast financial asset prices using the Binance API. It focuses on Bitcoin (BTC/USDT) but is designed to be adaptable for other trading pairs. The pipeline retrieves raw trading data, processes it into OHLCV (Open-High-Low-Close-Volume) format, and performs price forecasting. A dynamic web app visualizes both historical data and predictions.
 
-![Demo of BTCUSDT dummy forecasting over 1-minute windowing](./assets/demo_btc.gif)
+![Demo of BTCUSDT dummy forecasting over 10-sec windowing](./assets/btc_forecast_10sec.gif)
 
 ---
 
