@@ -110,4 +110,4 @@ Both approaches are implemented to allow side-by-side performance evaluation.
 - Enhance the scraping/transform pipeline
 - Extend forecasting models (Prophet, etc)
 - Incorporate live performance metrics for pandas and Pathway.
-- Deploy the web app Kubernetes
+- Deploy it at scale on Kubernetes clusters
